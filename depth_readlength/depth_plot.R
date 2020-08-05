@@ -48,8 +48,8 @@ plot <- ggplot(plot_matrix, aes(x=coverage,fill=tech)) +
           plot.title = element_text(size=14, face = "bold"),
           axis.title = element_text(size=14, face = "bold")) 
 
-pdf("coverage_final.pdf", width = 10, height = 8)
+pdf("depth_final.pdf", width = 10, height = 8)
 plot
 dev.off()
-write.csv2(file="coverage_means.tsv", x = mean_matrix)
+write.csv2(file="depth_means.tsv", x = mean_matrix)
 

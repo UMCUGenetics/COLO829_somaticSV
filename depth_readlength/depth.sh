@@ -14,4 +14,4 @@ do
         done
 done
 
-Rscript coverage_plot.R
+Rscript depth_plot.R
