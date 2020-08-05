@@ -1,0 +1,11 @@
+"";"tech";"type";"mean"
+"1";"10x";"normal";29,889999
+"2";"bionano";"normal";219,579903
+"3";"illumina";"normal";36,221864
+"4";"ont";"normal";45,0054
+"5";"pacbio";"normal";44,013079
+"6";"10x";"tumor";31,607865
+"7";"bionano";"tumor";218,177315
+"8";"illumina";"tumor";97,427884
+"9";"ont";"tumor";62,687363
+"10";"pacbio";"tumor";43,037142

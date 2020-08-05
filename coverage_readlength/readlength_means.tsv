@@ -1,0 +1,11 @@
+"";"tech";"type";"mean"
+"1";"bionano";"normal";101457,665419109
+"2";"illumina";"normal";526,251029536965
+"3";"nanopore";"normal";9034,03747631413
+"4";"pacbio";"normal";18151,7422748192
+"5";"tenx";"normal";16667,5848690592
+"6";"bionano";"tumor";94348,711402869
+"7";"illumina";"tumor";540,759388204488
+"8";"nanopore";"tumor";12661,2981942411
+"9";"pacbio";"tumor";19704,4626593807
+"10";"tenx";"tumor";24164,3982670705
