@@ -1,4 +1,4 @@
-#! /bin/sh
+#!!! Dont run this script but run each step individually
 
 ###1###
 #Use python script to get readlengths per chromosome for each technology (tumor and normal) (This is designed to submit jobs to an HPC). 

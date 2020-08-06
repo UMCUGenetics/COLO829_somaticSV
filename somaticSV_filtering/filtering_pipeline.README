@@ -1,0 +1,92 @@
+#!!! Dont run this script but run each step individually
+
+
+#Start with
+illumina.somatic.vcf
+nanopore.somatic.vcf
+pacbio.somatic.vcf
+tenx.somatic.vcf
+
+#Adjust the end position for insertions (needs to be Position+1 and not every tool has done this correctly)
+for VCF in *.somatic.vcf
+do
+	python adjust_end_pos_for_insertion.py $VCF > ${VCF/.vcf/.adjusted.vcf}
+done
+
+#merge using SURVIVOR
+ls -1 | grep "adjusted.vcf$" > merge.list
+/hpc/cog_bioinf/cuppen/personal_data/jvalleinclan/tools_kloosterman/SURVIVOR-1.0.6/Debug/SURVIVOR merge merge.list 200 1 0 0 0 0 somatic.merged.vcf
+
+#cleanup the VCF (try to remove duplicates, add some useful FILTER fields, sort out the orientation) and sort it
+python ../scripts/cleanup_survivor.py somatic.merged.vcf | ~/jvalleinclan/bin/bin/vcf-sort -c > somatic.merged.clean.vcf
+#Split it in single-technology calls
+grep '^#' somatic.merged.clean.vcf | tee somatic.onesupport.vcf somatic.multiplesupport.vcf > /dev/null
+grep -v '^#' somatic.merged.clean.vcf | grep 'SUPP=1;' >> somatic.onesupport.vcf
+grep -v '^#' somatic.merged.clean.vcf | grep -v 'SUPP=1;' >> somatic.multiplesupport.vcf
+
+
+#Annotate with validation
+for F in somatic.{one,multiple}support.vcf somatic.merged.clean.vcf
+do
+python ../scripts/annotate_sv_vcf_file_without_ori_mark_copy.py --input $F --file2 ../validation/capture/capture_validations_positive.vcf --distance 50 --annotation CAPTURE | \
+	python ../scripts/annotate_sv_vcf_file_without_ori_mark_copy.py --input /dev/stdin --file2 ../validation/pcr/pcr_validations_positive.vcf --distance 50 --annotation PCR | \
+	python ../scripts/annotate_sv_vcf_file_without_ori_mark_copy.py --input /dev/stdin --file2 ../validation/bionano/bionano.somatic.vcf --distance 1000 --annotation BIONANO > ${F/.vcf/.validations.vcf}
+done
+
+
+#Convert to tables for plotting
+python merged_somatic_counts.py
+
+
+#Merge the SV calls with multiple support and the calls with only one set support but validated
+grep ^# ../somatic.multiplesupport.validations.vcf > somatic.multiplesupport.onesupportval.vcf
+sed -i "s:COLO829T:COLO829T$(echo '\t')COLO829R:" somatic.multiplesupport.onesupportval.vcf
+grep -v ^# ../somatic.multiplesupport.validations.vcf | sed 's:SVTYPE_INF:SVTYPE:g' | awk 'BEGIN { FS="\t"; OFS="\t" } { $10=$10"\t"$10 } 1' >> somatic.multiplesupport.onesupportval.vcf
+grep -v ^# ../somatic.onesupport.validations.vcf | awk '$7 != "PASS"' | sed 's:SVTYPE_INF:SVTYPE:g' | awk 'BEGIN { FS="\t"; OFS="\t" } { $10=$10"\t"$10 } 1' >> somatic.multiplesupport.onesupportval.vcf
+cat somatic.multiplesupport.onesupportval.vcf | ~/jvalleinclan/bin/bin/vcf-sort > somatic.multiplesupport.onesupportval.sorted.vcf
+rm somatic.multiplesupport.onesupportval.vcf
+
+#Create the samplot command and run it
+for TECH in illumina nanopore pacbio tenx pcr_miseq pcr_nanopore capture
+do
+    mkdir $TECH
+    python ~/bin/samplot/src/samplot_vcf.py -d $TECH -b ${TECH}.tumor.bam \
+    --sample_ids COLO829T COLO829R --command_file ${TECH}/samplot_commands.sh
+    sed -i 's:$: -a --minq -1 -q 0 --min_event_size 10 --zoom 1000:g' ${TECH}/samplot_commands.sh
+    sh ${TECH}/samplot_commands.sh
+
+done
+
+#Create SV-plaudit/PlotCritic object and upload the images
+for TECH in illumina nanopore pacbio tenx pcr_nanopore pcr_miseq capture
+do
+python ~/bin/SV-plaudit/PlotCritic/project_setup.py -p COLO829_${TECH}_3 \
+-e jespejov@umcutrecht.nl -a AKIATATJHBMQRPBMIUO4 -s s4rrOXJkL5zecx0j1nLjV4kdb51Cqr13sLh0ruG/ \
+-q "Is the variant somatic?" -A "s":"Somatic" "g":"Germline" "m":"Mapping error" "n":"No evidence" \
+-r -R "chrom" "start" "end" "sv_type" "titles" "bams" -S "chrom" "start" "end" "sv_type"
+mv ~/bin/SV-plaudit/PlotCritic/config.json ${TECH}/config.json
+python ~/bin/SV-plaudit/PlotCritic/upload.py -d ${TECH}/ -c ${TECH}/config.json
+done
+
+####Then evaluate the calls on AWS, can't help this step.
+#Download the results as data_*.tsv
+#I.e. data_nanopore.tsv
+#Merge the results
+Rscript merged_samplot_results.R
+
+#Delete the project 
+for TECH in nanopore illumina pacbio tenx pcr_nanopore pcr_miseq capture
+do
+python ~/bin/SV-plaudit/PlotCritic/delete_project.py -f -c ${TECH}/config.json
+done
+
+#For the tech unique calls, to evaluate a few:
+python get_random_uniqueCalls.py > unique_to_check.vcf
+grep ^# unique_to_check.vcf > unique_to_check_fixed.vcf
+sed -i "s:COLO829T:COLO829T$(echo '\t')COLO829R:" unique_to_check_fixed.vcf
+grep -v ^# unique_to_check.vcf | sed 's:SVTYPE_INF:SVTYPE:g' | awk 'BEGIN { FS="\t"; OFS="\t" } { $10=$10"\t"$10 } 1' >> unique_to_check_fixed.vcf
+cat unique_to_check_fixed.vcf | ~/bin/vcf-sort > unique_to_check_fixed.sorted.vcf
+
+
+
+
