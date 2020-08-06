@@ -1,0 +1,59 @@
+#Do the following steps for Nanopore, Pacbio, tenX and Bionano
+
+To run ginkgo on the command line you must:
+
+1. Install ginkgo
+
+  Simply follow the instructions in the README.md that comes with Ginkgo (make sure you update the
+  value of main in both scripts/process.R and in scripts/reclust.R
+
+2. Create a directory
+
+  mkdir /path/to/dir (e.g. /hpc/cog_bioinf/kloosterman/users/mroosmalen/ginkgo/test)
+  
+
+3. Copy your compressed bed files (the output of bamTobed) into that directory
+#Convert BAM files to BED
+#from bionano already had a bed file from depth analysis
+
+bamToBed -i $bam | gzip > $bed
+
+  # Loop
+
+  for f in *.bed; do gzip $f > $f.gz; done
+  
+  # 1 bed file
+  gzip <file1>.bed > <file1>.bed.gz
+  
+  cp *.bed.gz /hpc/cog_bioinf/kloosterman/users/mroosmalen/ginkgo/test
+
+4. Create a file with the list of cells. The file must be called "list":
+
+  ls /hpc/cog_bioinf/kloosterman/users/mroosmalen/ginkgo/test | grep .bed.gz$ > /hpc/cog_bioinf/kloosterman/users/mroosmalen/ginkgo/test/list
+
+5. Create a configuration file with all the options for ginkgo. This is probably the trickiest point
+   as little documentation exists for this file. However, by reverse-engineering the php code, I
+   have built an example file with enough comments to be able to modify the most important aspects
+   of the analysis.
+
+  cp ginkgo.config
+  
+  # Edit the file with vi or your favourite editor:
+  vi /hpc/cog_bioinf/kloosterman/users/mroosmalen/ginkgo/test/config
+#Example found in gingko.config
+
+
+6. Run ginkgo:
+
+  # cd ~/src/ginkgo/
+  /hpc/cog_bioinf/kloosterman/tools/ginkgo/scripts/analyze.sh /hpc/cog_bioinf/kloosterman/users/mroosmalen/ginkgo/test
+
+
+#2. Create a directory under the uploads directory in the ginkgo installation directory
+#
+# mkdir /hpc/cog_bioinf/kloosterman/tools/ginkgo/uploads/new_run_123
+
+#  Note that the name of that directory is the $GINKGO_USER_ID. The main server uses a 20 digits
+# random number. Feel free to use whatever you see fit.
+
+#Then use the SegCopy output, which contains the CNA calls
