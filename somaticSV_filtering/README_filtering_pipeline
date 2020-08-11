@@ -1,6 +1,4 @@
 #!!! Dont run this script but run each step individually
-
-
 #Start with
 illumina.somatic.vcf
 nanopore.somatic.vcf
@@ -13,8 +11,16 @@ do
 	python adjust_end_pos_for_insertion.py $VCF > ${VCF/.vcf/.adjusted.vcf}
 done
 
+#Remove duplicate breakpoints in VCF of illumina and pacbio -> Messes up downstream analysis with survivor unfortunately
+python pacbio_uniquify.py > pacbio.somatic.adjusted.unique.vcf
+python illumina_uniquify.py > illumina.somatic.adjusted.vcf
+
 #merge using SURVIVOR
-ls -1 | grep "adjusted.vcf$" > merge.list
+echo "illumina.somatic.adjusted.unique.vcf"> merge.list
+echo "nanopore.somatic.adjusted.vcf" >> merge.list
+echo "pacbio.somatic.adjusted.unique.vcf" >> merge.list
+echo "tenx.somatic.adjusted.vcf" >> merge.list
+
 /hpc/cog_bioinf/cuppen/personal_data/jvalleinclan/tools_kloosterman/SURVIVOR-1.0.6/Debug/SURVIVOR merge merge.list 200 1 0 0 0 0 somatic.merged.vcf
 
 #cleanup the VCF (try to remove duplicates, add some useful FILTER fields, sort out the orientation) and sort it
@@ -28,14 +34,15 @@ grep -v '^#' somatic.merged.clean.vcf | grep -v 'SUPP=1;' >> somatic.multiplesup
 #Annotate with validation
 for F in somatic.{one,multiple}support.vcf somatic.merged.clean.vcf
 do
-python ../scripts/annotate_sv_vcf_file_without_ori_mark_copy.py --input $F --file2 ../validation/capture/capture_validations_positive.vcf --distance 50 --annotation CAPTURE | \
-	python ../scripts/annotate_sv_vcf_file_without_ori_mark_copy.py --input /dev/stdin --file2 ../validation/pcr/pcr_validations_positive.vcf --distance 50 --annotation PCR | \
-	python ../scripts/annotate_sv_vcf_file_without_ori_mark_copy.py --input /dev/stdin --file2 ../validation/bionano/bionano.somatic.vcf --distance 1000 --annotation BIONANO > ${F/.vcf/.validations.vcf}
+python annotate_sv_vcf_file.py --input $F --file2 capture_validations_positive.vcf --distance 50 --annotation CAPTURE | \
+	python annotate_sv_vcf_file.py --input /dev/stdin --file2 pcr_validations_positive.vcf --distance 50 --annotation PCR | \
+	python annotate_sv_vcf_file.py --input /dev/stdin --file2 bionano.somatic.vcf --distance 1000 --annotation BIONANO > ${F/.vcf/.validations.vcf}
 done
 
 
-#Convert to tables for plotting
-python merged_somatic_counts.py
+#Make upset plot (Supplementary Figure 2)
+python vcf_merged_to_matrix.py somatic.merged.clean.validations.vcf > somatic.merged.clean.validations.upset.tsv
+Rscript upset_merged.R
 
 
 #Merge the SV calls with multiple support and the calls with only one set support but validated
@@ -45,6 +52,7 @@ grep -v ^# ../somatic.multiplesupport.validations.vcf | sed 's:SVTYPE_INF:SVTYPE
 grep -v ^# ../somatic.onesupport.validations.vcf | awk '$7 != "PASS"' | sed 's:SVTYPE_INF:SVTYPE:g' | awk 'BEGIN { FS="\t"; OFS="\t" } { $10=$10"\t"$10 } 1' >> somatic.multiplesupport.onesupportval.vcf
 cat somatic.multiplesupport.onesupportval.vcf | ~/jvalleinclan/bin/bin/vcf-sort > somatic.multiplesupport.onesupportval.sorted.vcf
 rm somatic.multiplesupport.onesupportval.vcf
+
 
 #Create the samplot command and run it
 for TECH in illumina nanopore pacbio tenx pcr_miseq pcr_nanopore capture
@@ -68,10 +76,11 @@ mv ~/bin/SV-plaudit/PlotCritic/config.json ${TECH}/config.json
 python ~/bin/SV-plaudit/PlotCritic/upload.py -d ${TECH}/ -c ${TECH}/config.json
 done
 
+
 ####Then evaluate the calls on AWS, can't help this step.
 #Download the results as data_*.tsv
 #I.e. data_nanopore.tsv
-#Merge the results
+#Merge the results into merged_samplot_results.tsv
 Rscript merged_samplot_results.R
 
 #Delete the project 
@@ -87,6 +96,42 @@ sed -i "s:COLO829T:COLO829T$(echo '\t')COLO829R:" unique_to_check_fixed.vcf
 grep -v ^# unique_to_check.vcf | sed 's:SVTYPE_INF:SVTYPE:g' | awk 'BEGIN { FS="\t"; OFS="\t" } { $10=$10"\t"$10 } 1' >> unique_to_check_fixed.vcf
 cat unique_to_check_fixed.vcf | ~/bin/vcf-sort > unique_to_check_fixed.sorted.vcf
 
+#Picking up on merged_samplot_results.tsv:
+#Manually check the dubious calls using IGV, and reach a final decision on:
+#final_somatic_list.tsv
+#Plot the results (Supplementary Figure 2C
+Rscript plot_samplot_validation.R
 
+#Then create a VCF with all the breakpoints in the list
+grep -v "Duplicated" final_somatic_list.tsv > final_somatic_list_nodups.tsv
+python somaticbreakpoints_from_source.py final_somatic_list_nodups.tsv > final_somatic_list.vcf
+vcf-sort -c final_somatic_list.vcf > final_somatic_list.sorted.vcf
+grep ^# final_somatic_list.sorted.vcf > COLO829.somatic.vcf
+grep -v ^# final_somatic_list.sorted.vcf | awk '$7 == "Somatic"' >> COLO829.somatic.vcf
+#This VCF is still temporary, will check a couple of extra things afterwards (length, orientation).
 
+#Overlap it with Raw data and with Validation data:
+python annotate_sv_vcf_file.py --input COLO829.somatic.vcf --file2 tenx.somatic.vcf --distance 100 --annotation 10X | \
+python annotate_sv_vcf_file.py --input /dev/stdin --file2 pacbio.somatic.vcf --distance 100 --annotation PACBIO | \
+python annotate_sv_vcf_file.py --input /dev/stdin --file2 nanopore.somatic.vcf --distance 100 --annotation NANOPORE | \
+python annotate_sv_vcf_file.py --input /dev/stdin --file2 illumina.somatic.vcf --distance 100 --annotation ILLUMINA | \
+python annotate_sv_vcf_file.py --input /dev/stdin --file2 capture_validations_positive.vcf --distance 100 --annotation CAPTURE | \
+python annotate_sv_vcf_file.py --input /dev/stdin --file2 pcr_validations_positive.vcf --distance 50 --annotation PCR | \
+python annotate_sv_vcf_file.py --input /dev/stdin --file2 bionano.somatic.vcf --distance 1000 --annotation BIONANO > COLO829.somatic.overlap.somaticData.validations.vcf
 
+#Make upset plots (Figure 2)
+python vcf_somatic_overlap_to_matrix.py COLO829.somatic.overlap.somaticData.validations.vcf > COLO829.somatic.overlap.somaticData.validations.upset.tsv
+Rscript upset_truthset.R
+
+#Convert VCF to table for manual annotation
+python get_final_truthset_table.py COLO829.somatic.overlap.somaticData.validations.vcf > COLO829.somatic.overlap.somaticData.validations.annotated.tsv
+
+#Manually annotate with clusters, genes, other comments, check the strands, using IGV
+#Downloaded as truthset_table.tsv (Supplementary Table 3 (that one has one column less, the old ID substituted for new ID))
+#
+#Plot the characteristics (Figure 3A)
+python create_characteristics_table.py > truthset_characteristic_matrix.tsv
+Rscript plot_characteristics.R
+
+#Create final truthset VCF:
+python truthset_table_to_VCF.py truthset_table.tsv > truthset_somaticSVs_COLO829.vcf
