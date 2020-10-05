@@ -110,25 +110,10 @@ grep ^# final_somatic_list.sorted.vcf > COLO829.somatic.vcf
 grep -v ^# final_somatic_list.sorted.vcf | awk '$7 == "Somatic"' >> COLO829.somatic.vcf
 #This VCF is still temporary, will check a couple of extra things afterwards (length, orientation).
 
-#Overlap it with Raw data and with Validation data:
-python annotate_sv_vcf_file.py --input COLO829.somatic.vcf --file2 tenx.somatic.vcf --distance 100 --annotation 10X | \
-python annotate_sv_vcf_file.py --input /dev/stdin --file2 pacbio.somatic.vcf --distance 100 --annotation PACBIO | \
-python annotate_sv_vcf_file.py --input /dev/stdin --file2 nanopore.somatic.vcf --distance 100 --annotation NANOPORE | \
-python annotate_sv_vcf_file.py --input /dev/stdin --file2 illumina.somatic.vcf --distance 100 --annotation ILLUMINA | \
-python annotate_sv_vcf_file.py --input /dev/stdin --file2 capture_validations_positive.vcf --distance 100 --annotation CAPTURE | \
-python annotate_sv_vcf_file.py --input /dev/stdin --file2 pcr_validations_positive.vcf --distance 50 --annotation PCR | \
-python annotate_sv_vcf_file.py --input /dev/stdin --file2 bionano.somatic.vcf --distance 1000 --annotation BIONANO > COLO829.somatic.overlap.somaticData.validations.vcf
-
-#Make upset plots (Figure 2)
-python vcf_somatic_overlap_to_matrix.py COLO829.somatic.overlap.somaticData.validations.vcf > COLO829.somatic.overlap.somaticData.validations.upset.tsv
-Rscript upset_truthset.R
-
-#Convert VCF to table for manual annotation
-python get_final_truthset_table.py COLO829.somatic.overlap.somaticData.validations.vcf > COLO829.somatic.overlap.somaticData.validations.annotated.tsv
-
-#Manually annotate with clusters, genes, other comments, check the strands, using IGV
+#Add manual comments on the table, using IGV, BAM files, validation data, etc. to truthset_table.tsv
+#Manually annotate with clusters, genes, other comments, check the strands, Change the breakpoint ID to a meaninngful one. 
 #Downloaded as truthset_table.tsv (Supplementary Table 3 (that one has one column less, the old ID substituted for new ID))
-#
+#Extract the columns of support for Upset plot.
 #Plot the characteristics (Figure 3A)
 python create_characteristics_table.py > truthset_characteristic_matrix.tsv
 Rscript plot_characteristics.R
