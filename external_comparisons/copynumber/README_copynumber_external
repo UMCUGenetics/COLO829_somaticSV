@@ -1,0 +1,25 @@
+#!!! Dont run this script but run each step individually
+#NYGC copy number calls from: https://www.nygenome.org/bioinformatics/3-cancer-cell-lines-on-2-sequencers/
+#Convert to window format 
+python convert_nygc_windows.py > COLO-829--COLO-829BL.cnv.annotated.v6.final.windows.bed
+#liftover to hg19
+liftOver -bedPlus=3 -tab COLO-829--COLO-829BL.cnv.annotated.v6.final.windows.bed hg38ToHg19.over.chain.gz COLO-829--COLO-829BL.cnv.annotated.v6.final.hg19.bed COLO-829--COLO-829BL.cnv.annotated.v6.final.hg19.unmapped.bed
+sort -k1,1 -k2,2n COLO-829--COLO-829BL.cnv.annotated.v6.final.hg19.bed > COLO-829--COLO-829BL.cnv.annotated.v6.final.hg19.sorted.bed
+#group events
+python get_segments_nygc.py > COLO-829--COLO-829BL.cnv.annotated.v6.final.hg19.sorted.grouped.bed
+#Convert to circos
+sed 's:chr:hs:g' COLO-829--COLO-829BL.cnv.annotated.v6.final.hg19.sorted.grouped.bed > COLO-829--COLO-829BL.cnv.annotated.v6.final.hg19.circos
+
+#Download Single cell CNVs from https://www.nature.com/articles/s42003-020-1044-8 (suppl table 4)
+#Extract per cluster
+python extract_group_CNA.py single_cell_CNA.tsv
+
+
+#Merge datasets
+python merged_datasets.python > merged_external.tsv
+
+#Plot 
+Rscript plot_CNA_external.R
+
+#Correlation
+Rscript create_corrplot_external.R

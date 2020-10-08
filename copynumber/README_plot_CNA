@@ -1,0 +1,25 @@
+
+#ILL
+#Convert to Circos
+python convert_bicseq2_circos.py > illumina.tumor.circos
+
+#Others
+#Indicate for tumor the column needed
+for S in bionano nanopore pacbio tenx
+do
+	python convert_ginkgo_circos.py ../${S}.segcopy 4 > ${S}.tumor.circos
+done
+
+#Nanopore ploidy prediction was off by 1, correct
+cp nanopore.tumor.circos nanopore.tumor.original.circos
+cat nanopore.tumor.original.circos | awk '{print $1"\t"$2"\t"$3"\t"$4-1}' > nanopore.tumor.circos
+
+
+#Files were in circos format because previous version of the figure was a circos plot. Still useful for plotting
+python merge_ginkgo_bicseq.py > mergedCNA.tsv
+
+#CNA plot
+Rscript plot_CNA.R
+
+#Correlation
+Rscript create_corrplot.R

@@ -1,6 +1,6 @@
 library("ggplot2")
 library("gtools")
-library(reshape2)
+library("reshape2")
 #Largely inspired by https://github.com/UMCUGenetics/IAP/blob/develop/scripts/makeKaryotype.R
 #from @Joep de Ligt and @Robert Ernst
 
@@ -26,15 +26,6 @@ dfm$cols <- apply(dfm, 1, function(x){
   } else {
     col <- 'neutral1'
   }
-  #   if (x["chr"] == "X") {
-  #     col <- 'neutral1'
-  #   }
-  #   else if (as.integer(x["chr"])%%2 == 0){
-  #     col <- 'neutral1'
-  #   } else {
-  #     col <- 'neutral2'
-  #   }
-  # }
   col
 })
 

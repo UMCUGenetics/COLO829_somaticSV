@@ -1,0 +1,96 @@
+#!!! Dont run this script but run each step individually
+
+###ILLUMINA
+#Mapped at the HMF with BWA mem and GATK indel realigner. 
+java -ea -Xmx31g \
+	-Dsamjdk.create_index=true \
+	-Dsamjdk.use_async_io_read_samtools=true \
+	-Dsamjdk.use_async_io_write_samtools=true \
+	-Dsamjdk.use_async_io_write_tribble=true \
+	-Dsamjdk.compression_level=1 \
+	-Dgridss.gridss.output_to_temp_file=true \
+	-cp /hpc/cog_bioinf/kloosterman/tools/gridss_v2.0.1/gridss-2.0.1-gridss-jar-with-dependencies.jar gridss.CallVariants \
+	TMP_DIR=. \
+	WORKING_DIR=. \
+	REFERENCE_SEQUENCE=/hpc/cog_bioinf/GENOMES/Homo_sapiens.GRCh37.GATK.illumina/Homo_sapiens.GRCh37.GATK.illumina.fasta \
+	INPUT=COLO829T_dedup.realigned.bam \
+	INPUT=COLO829R_dedup.realigned.bam \
+	OUTPUT=COLO829.sv.vcf \
+	ASSEMBLY=COLO829.gridss.assembly.bam 
+Rscript gridss_somatic_filter.R --input COLO829.sv.vcf --output COLO829.somatic.vcf --normalordinal 2
+gunzip -c COLO829.somatic.vcf.bgz  | grep '^#'  > COLO829.sv.somatic.vcf
+gunzip -c COLO829.somatic.vcf.bgz | grep -v '^#' | awk '$5 !~ /\./' >> COLO829.sv.somatic.vcf
+
+
+
+###NANOPORE
+#Tumor
+/hpc/cog_bioinf/kloosterman/tools/ngmlr-0.2.6/ngmlr -x ont -t 12 -r /hpc/cog_bioinf/kloosterman/users/jvalleinclan/REFERENCES/Homo_sapiens.GRCh37.GATK.illumina.fasta -q /hpc/cog_bioinf/kloosterman/users/jvalleinclan/nanopore/colon/fastq/colo829.tumor.merged.fastq.gz -o /hpc/cog_bioinf/kloosterman/users/jvalleinclan/nanopore/colon/sniffles/colo829.tumor.ngmlr.sam
+samtools view -b /hpc/cog_bioinf/kloosterman/users/jvalleinclan/nanopore/colon/sniffles/colo829.tumor.ngmlr.sam | samtools sort -o /hpc/cog_bioinf/kloosterman/users/jvalleinclan/nanopore/colon/sniffles/colo829.tumor.ngmlr.sorted.bam -T /hpc/cog_bioinf/kloosterman/users/jvalleinclan/nanopore/colon/sniffles/colo829.tumor.ngmlr.tmp -@ 12
+~/kloosterman/tools/Sniffles-master/bin/sniffles-core-1.0.8/sniffles -m /hpc/cog_bioinf/kloosterman/users/jvalleinclan/nanopore/colon/sniffles/colo829.tumor.ngmlr.sorted.bam -v /hpc/cog_bioinf/kloosterman/users/jvalleinclan/nanopore/colon/sniffles/colo829.tumor.ngmlr.vcf --report_BND --genotype
+~/bin/NanoSV/bin/NanoSV -t 8 -c config_COLO829_nanosv.ini -b ~/bin/NanoSV/bin/human_hg19.bed -o COLO829T.nanosv.ngmlr.vcf /hpc/cog_bioinf/kloosterman/users/jvalleinclan/nanopore/colon/bams/colo829.tumor.ngmlr.sorted.bam
+
+#Normal 
+/hpc/cog_bioinf/kloosterman/tools/ngmlr-0.2.6/ngmlr -x ont -t 12 -r /hpc/cog_bioinf/kloosterman/users/jvalleinclan/REFERENCES/Homo_sapiens.GRCh37.GATK.illumina.fasta -q /hpc/cog_bioinf/kloosterman/users/jvalleinclan/nanopore/colon/fastq/colo829.normal.merged.fastq.gz -o /hpc/cog_bioinf/kloosterman/users/jvalleinclan/nanopore/colon/sniffles/colo829.normal.ngmlr.sam
+samtools view -b /hpc/cog_bioinf/kloosterman/users/jvalleinclan/nanopore/colon/sniffles/colo829.normal.ngmlr.sam | samtools sort -o /hpc/cog_bioinf/kloosterman/users/jvalleinclan/nanopore/colon/sniffles/colo829.normal.ngmlr.sorted.bam -T /hpc/cog_bioinf/kloosterman/users/jvalleinclan/nanopore/colon/sniffles/colo829.normal.ngmlr.tmp -@ 12
+~/kloosterman/tools/Sniffles-master/bin/sniffles-core-1.0.8/sniffles -m /hpc/cog_bioinf/kloosterman/users/jvalleinclan/nanopore/colon/sniffles/colo829.normal.ngmlr.sorted.bam -v /hpc/cog_bioinf/kloosterman/users/jvalleinclan/nanopore/colon/sniffles/colo829.normal.ngmlr.vcf --report_BND --genotype 
+~/bin/NanoSV/bin/NanoSV -t 8 -c config_COLO829_nanosv.ini -b ~/bin/NanoSV/bin/human_hg19.bed -o COLO829R.nanosv.ngmlr.vcf /hpc/cog_bioinf/kloosterman/users/jvalleinclan/nanopore/colon/bams/colo829.normal.ngmlr.sorted.bam
+
+for VCF in COLO829{T,R}.{nanosv,sniffles}.ngmlr.vcf
+do
+grep '^#' ${VCF} > ${VCF/.vcf/.filtered.vcf}
+grep -v '^#' ${VCF} | awk '$7 == "PASS"' >> ${VCF/.vcf/.filtered.vcf}
+/hpc/cog_bioinf/cuppen/personal_data/jvalleinclan/bin/bin/vcf-sort ${VCF/.vcf/.filtered.vcf} > ${VCF/.vcf/.filtered.sorted.vcf}
+echo  ${VCF/.vcf/.filtered.sorted.vcf}  >> nanopore_list
+done
+/hpc/cog_bioinf/cuppen/personal_data/jvalleinclan/tools_kloosterman/SURVIVOR-1.0.6/Debug/SURVIVOR merge nanopore_list 200 1 0 0 0 0 nanopore.merged.vcf
+grep -P "^#|VEC=00[01][01];" nanopore.merged.vcf | python /hpc/cog_bioinf/cuppen/project_data/Jose_COLO829/shared_COLO829/final_somatic_list_of_svs/pipeline_no_somatizer/scripts/adjust_end_pos_for_insertion.py /dev/stdin > nanopore.somatic.vcf
+
+
+###PACBIO
+#Mapped at pacbio with minimap2 
+#Sv calling at pacbio using pbsv 2.1.0
+python filter_somatic_pacbio.py hg19.COLO_829.pbsv.vcf | awk '{gsub(/chr/,""); print}' | awk '{gsub(/CHR/,""); print}' | \
+awk '{gsub(/ID=chr/,"ID="); print}' | awk '{gsub(/#OM/,"#CHROM"); print}' | awk -F $'\t' '{OFS = FS}{$10=""; print $0}' > pacbio.somatic.vcf
+
+###10X
+#Convert to fastq
+longranger mkfastq --id=10X_COLO829_MKFASTQ \
+                     --run=/hpc/cog_bioinf/kloosterman/raw_data/ILLUMINA_EXTERNAL/10X_COLO829/180720_ST-E00290_0328_AHNKG5CCXY/ \
+                     --csv=/hpc/cog_bioinf/kloosterman/raw_data/ILLUMINA_EXTERNAL/10X_COLO829/longranger_bcl2fastq.csv 
+#Mapping and SV calling with longranger
+longranger wgs --id=COLO829T_somatic_10X \
+		--fastqs=/hpc/cog_bioinf/kloosterman/raw_data/ILLUMINA_EXTERNAL/10X_COLO829/10X_COLO829_MKFASTQ/outs/fastq_path/HNKG5CCXY/COLO829T_10X/ \
+		--sample=COLO829T_10X \
+		--reference=~/kloosterman/tools/longranger-2.2.2/refdata-b37-2.1.0/ \
+		--vcmode=gatk:/hpc/local/CentOS7/cog_bioinf/GenomeAnalysisTK-3.8/GenomeAnalysisTK.jar \
+		--somatic \
+		--localcores=16 \
+		--localmem=50
+longranger wgs --id=COLO829R_10X \
+		--fastqs=/hpc/cog_bioinf/kloosterman/raw_data/ILLUMINA_EXTERNAL/10X_COLO829/10X_COLO829_MKFASTQ/outs/fastq_path/HNKG5CCXY/COLO829R_10X/ \
+		--sample=COLO829R_10X \
+		--reference=~/kloosterman/tools/longranger-2.2.2/refdata-b37-2.1.0/ \
+		--vcmode=gatk:/hpc/local/CentOS7/cog_bioinf/GenomeAnalysisTK-3.8/GenomeAnalysisTK.jar \
+		--localcores=16 \
+		--localmem=50
+
+#Merge and filter SV calls 
+#1. combine "large SVs" and dels, , which are in different files
+for SAMPLE in COLO829R COLO829T_somaticMode
+do
+	OUT=${SAMPLE}_10X_largeSVs_dels.vcf
+	grep '^#' ${SAMPLE}_10X_largeSVs.vcf > $OUT
+	grep -v '^#' ${SAMPLE}_10X_largeSVs.vcf | awk '$7 == "PASS"' >> $OUT
+	grep -v '^#' ${SAMPLE}_10X_dels.vcf | awk '$7 == "PASS"' >> $OUT	
+done
+#2. adjust sample name
+sed -i 's:COLO829T_somatic_10X:COLO829T_10X:g' COLO829T_somaticMode_10X_largeSVs_dels.vcf
+#3. merge with survivor
+for VCF in *_largeSVs_dels.vcf
+do 
+	echo $VCF >> tenx_list
+done
+/hpc/cog_bioinf/cuppen/personal_data/jvalleinclan/tools_kloosterman/SURVIVOR-1.0.6/Debug/SURVIVOR merge tenx_list 200 1 0 0 0 0 tenx.merged.vcf
+#4. filter tumor only calls
+grep -P "^#|VEC=0[01];" tenx.merged.vcf > tenx.somatic.vcf

@@ -1,48 +1,64 @@
-#Lift the COLO829 somatic SV truthset to GRCh38
-#First convert to BEDPE format 
+#####Convert truthset to BEDPE format
 egrep truthset_[0-9]+_1 truthset_somaticSVs_COLO829.vcf | ~/bin/tools_kloosterman/SURVIVOR-1.0.6/Debug/SURVIVOR vcftobed /dev/stdin 0 -1 /dev/stdout  | awk -v OFS='\t' '{$1="chr"$1;$3=$3+1;$4="chr"$4;$6=$6+1} {print}' > truthset_somaticSVs_COLO829.bedpe
-#Then lift with liftover:
+#Convert to GRCh38
 python liftOverBedpe.py --lift ./liftOver --chain hg19ToHg38.over.chain.gz --i truthset_somaticSVs_COLO829.bedpe --o truthset_somaticSVs_COLO829.GRCh38.bedpe --v T
 
-
-#Downloaded HiSeq and NovaSeq somatic SV sets, from https://www.nygenome.org/bioinformatics/3-cancer-cell-lines-on-2-sequencers/:
+#####Download Highconfidence SVs from https://www.nygenome.org/bioinformatics/3-cancer-cell-lines-on-2-sequencers/
+#Hiseq
 wget https://storage.googleapis.com/nygc-wp-599886722202-wp-data/wp-media/bioinformatics/CancerCellLines/COLO-829--COLO-829BL.sv.annotated.v6.somatic.high_confidence.final.bedpe
-wget https://storage.googleapis.com/nygc-wp-599886722202-wp-data/wp-media/bioinformatics/CancerCellLines/COLO-829-NovaSeq--COLO-829BL-NovaSeq.sv.annotated.v6.somatic.high_confidence.final.bedpe
+#Add identifier
+cat COLO-829--COLO-829BL.sv.annotated.v6.somatic.high_confidence.final.bedpe | grep -v "^#" | awk '$8="Hiseq_"NR' OFS="\t" > COLO-829--COLO-829BL.sv.annotated.v6.somatic.high_confidence.final.mod.bedpe
 
-#Overlap with BEDtools and classify as overlap, no overlap and one sided overlap
-#Compare Hiseq
+#Novaseq
+wget https://storage.googleapis.com/nygc-wp-599886722202-wp-data/wp-media/bioinformatics/CancerCellLines/COLO-829-NovaSeq--COLO-829BL-NovaSeq.sv.annotated.v6.somatic.high_confidence.final.bedpe
+cat COLO-829-NovaSeq--COLO-829BL-NovaSeq.sv.annotated.v6.somatic.high_confidence.final.bedpe | grep -v "^#" | awk '$8="Novaseq_"NR' OFS="\t" > COLO-829-NovaSeq--COLO-829BL-NovaSeq.sv.annotated.v6.somatic.high_confidence.final.mod.bedpe
+
+
+
+
+###Compare Hiseq
 #Overlap 55
-/hpc/local/CentOS7/cog_bioinf/bedtools-2.25.0/bin/bedtools pairtopair -type both -slop 1000 -is -a COLO-829--COLO-829BL.sv.annotated.v6.somatic.high_confidence.final.bedpe -b truthset_somaticSVs_COLO829.GRCh38.bedpe > COLO-829--COLO-829BL.sv.annotated.v6.somatic.high_confidence.final.overlap.bedpe
-cut -f1-6 COLO-829--COLO-829BL.sv.annotated.v6.somatic.high_confidence.final.overlap.bedpe |  sort | uniq | wc -l
-echo -e "HiSeq\tOverlap\t`cut -f1-6 COLO-829--COLO-829BL.sv.annotated.v6.somatic.high_confidence.final.overlap.bedpe |  sort | uniq | wc -l`" > NYGC_comparison_result.tsv
+/hpc/local/CentOS7/cog_bioinf/bedtools-2.25.0/bin/bedtools pairtopair -type both -slop 1000 -is -a COLO-829--COLO-829BL.sv.annotated.v6.somatic.high_confidence.final.mod.bedpe -b truthset_somaticSVs_COLO829.GRCh38.bedpe > COLO-829--COLO-829BL.sv.annotated.v6.somatic.high_confidence.final.overlap.bedpe
+#cut -f1-6 COLO-829--COLO-829BL.sv.annotated.v6.somatic.high_confidence.final.overlap.bedpe |  sort | uniq | wc -l
+#echo -e "HiSeq\tOverlap\t`cut -f1-6 COLO-829--COLO-829BL.sv.annotated.v6.somatic.high_confidence.final.overlap.bedpe |  sort | uniq | wc -l`" > NYGC_comparison_result.tsv
+
 #No overlap 19
-/hpc/local/CentOS7/cog_bioinf/bedtools-2.25.0/bin/bedtools pairtopair -type neither -slop 1000 -is -a COLO-829--COLO-829BL.sv.annotated.v6.somatic.high_confidence.final.bedpe -b truthset_somaticSVs_COLO829.GRCh38.bedpe > COLO-829--COLO-829BL.sv.annotated.v6.somatic.high_confidence.final.noOverlap.bedpe
+/hpc/local/CentOS7/cog_bioinf/bedtools-2.25.0/bin/bedtools pairtopair -type neither -slop 1000 -is -a COLO-829--COLO-829BL.sv.annotated.v6.somatic.high_confidence.final.mod.bedpe -b truthset_somaticSVs_COLO829.GRCh38.bedpe > COLO-829--COLO-829BL.sv.annotated.v6.somatic.high_confidence.final.noOverlap.bedpe
 cut -f1-6 COLO-829--COLO-829BL.sv.annotated.v6.somatic.high_confidence.final.noOverlap.bedpe | sort | uniq | wc -l
 echo -e "HiSeq\tnoOverlap\t`cut -f1-6 COLO-829--COLO-829BL.sv.annotated.v6.somatic.high_confidence.final.noOverlap.bedpe
 #Either side 58
-/hpc/local/CentOS7/cog_bioinf/bedtools-2.25.0/bin/bedtools pairtopair -type either -slop 1000 -is -a COLO-829--COLO-829BL.sv.annotated.v6.somatic.high_confidence.final.bedpe -b truthset_somaticSVs_COLO829.GRCh38.bedpe > COLO-829--COLO-829BL.sv.annotated.v6.somatic.high_confidence.final.either.bedpe
+/hpc/local/CentOS7/cog_bioinf/bedtools-2.25.0/bin/bedtools pairtopair -type either -slop 1000 -is -a COLO-829--COLO-829BL.sv.annotated.v6.somatic.high_confidence.final.mod.bedpe -b truthset_somaticSVs_COLO829.GRCh38.bedpe > COLO-829--COLO-829BL.sv.annotated.v6.somatic.high_confidence.final.either.bedpe
 cut -f1-6 COLO-829--COLO-829BL.sv.annotated.v6.somatic.high_confidence.final.either.bedpe | sort | uniq | wc -l
 #Get the ones that overlap on one side only
 cut -f1-6 COLO-829--COLO-829BL.sv.annotated.v6.somatic.high_confidence.final.overlap.bedpe | grep -v -e -E -f - COLO-829--COLO-829BL.sv.annotated.v6.somatic.high_confidence.final.either.bedpe > COLO-829--COLO-829BL.sv.annotated.v6.somatic.high_confidence.final.oneSideOnly.bedpe
 echo -e "HiSeq\toneSide\t`cut -f1-6 COLO-829--COLO-829BL.sv.annotated.v6.somatic.high_confidence.final.oneSideOnly.bedpe |  sort | uniq | wc -l`" >> NYGC_comparison_result.tsv
+#Get ids:
+cut -f8 COLO-829--COLO-829BL.sv.annotated.v6.somatic.high_confidence.final.overlap.bedpe COLO-829--COLO-829BL.sv.annotated.v6.somatic.high_confidence.final.either.bedpe | sort | uniq  > Hiseq_overlap.txt
+cut -f8 COLO-829--COLO-829BL.sv.annotated.v6.somatic.high_confidence.final.noOverlap.bedpe > Hiseq_noOverlap.txt
+
 
 #Compare Nextseq
 #Overlap 56
-/hpc/local/CentOS7/cog_bioinf/bedtools-2.25.0/bin/bedtools pairtopair -type both -slop 1000 -is -a COLO-829-NovaSeq--COLO-829BL-NovaSeq.sv.annotated.v6.somatic.high_confidence.final.bedpe -b truthset_somaticSVs_COLO829.GRCh38.bedpe > COLO-829-NovaSeq--COLO-829BL-NovaSeq.sv.annotated.v6.somatic.high_confidence.final.overlap.bedpe
+/hpc/local/CentOS7/cog_bioinf/bedtools-2.25.0/bin/bedtools pairtopair -type both -slop 1000 -is -a COLO-829-NovaSeq--COLO-829BL-NovaSeq.sv.annotated.v6.somatic.high_confidence.final.mod.bedpe -b truthset_somaticSVs_COLO829.GRCh38.bedpe > COLO-829-NovaSeq--COLO-829BL-NovaSeq.sv.annotated.v6.somatic.high_confidence.final.overlap.bedpe
 cut -f1-6 COLO-829-NovaSeq--COLO-829BL-NovaSeq.sv.annotated.v6.somatic.high_confidence.final.overlap.bedpe |  sort | uniq | wc -l
 echo -e "NovaSeq\tOverlap\t`cut -f1-6 COLO-829-NovaSeq--COLO-829BL-NovaSeq.sv.annotated.v6.somatic.high_confidence.final.overlap.bedpe |  sort | uniq | wc -l`" >> NYGC_comparison_result.tsv
 #No overlap 16
-/hpc/local/CentOS7/cog_bioinf/bedtools-2.25.0/bin/bedtools pairtopair -type neither -slop 1000 -is -a COLO-829-NovaSeq--COLO-829BL-NovaSeq.sv.annotated.v6.somatic.high_confidence.final.bedpe -b truthset_somaticSVs_COLO829.GRCh38.bedpe > COLO-829-NovaSeq--COLO-829BL-NovaSeq.sv.annotated.v6.somatic.high_confidence.final.noOverlap.bedpe
+/hpc/local/CentOS7/cog_bioinf/bedtools-2.25.0/bin/bedtools pairtopair -type neither -slop 1000 -is -a COLO-829-NovaSeq--COLO-829BL-NovaSeq.sv.annotated.v6.somatic.high_confidence.final.mod.bedpe -b truthset_somaticSVs_COLO829.GRCh38.bedpe > COLO-829-NovaSeq--COLO-829BL-NovaSeq.sv.annotated.v6.somatic.high_confidence.final.noOverlap.bedpe
 cut -f1-6 COLO-829-NovaSeq--COLO-829BL-NovaSeq.sv.annotated.v6.somatic.high_confidence.final.noOverlap.bedpe |  sort | uniq | wc -l
 echo -e "NovaSeq\tnoOverlap\t`cut -f1-6 COLO-829-NovaSeq--COLO-829BL-NovaSeq.sv.annotated.v6.somatic.high_confidence.final.noOverlap.bedpe |  sort | uniq | wc -l`" >> NYGC_comparison_result.tsv
 #Either side 59
-/hpc/local/CentOS7/cog_bioinf/bedtools-2.25.0/bin/bedtools pairtopair -type either -slop 1000 -is -a COLO-829-NovaSeq--COLO-829BL-NovaSeq.sv.annotated.v6.somatic.high_confidence.final.bedpe -b truthset_somaticSVs_COLO829.GRCh38.bedpe > COLO-829-NovaSeq--COLO-829BL-NovaSeq.sv.annotated.v6.somatic.high_confidence.final.either.bedpe
+/hpc/local/CentOS7/cog_bioinf/bedtools-2.25.0/bin/bedtools pairtopair -type either -slop 1000 -is -a COLO-829-NovaSeq--COLO-829BL-NovaSeq.sv.annotated.v6.somatic.high_confidence.final.mod.bedpe -b truthset_somaticSVs_COLO829.GRCh38.bedpe > COLO-829-NovaSeq--COLO-829BL-NovaSeq.sv.annotated.v6.somatic.high_confidence.final.either.bedpe
 cut -f1-6 COLO-829-NovaSeq--COLO-829BL-NovaSeq.sv.annotated.v6.somatic.high_confidence.final.either.bedpe |  sort | uniq | wc -l
 #Get the ones that overlap on one side only
 cut -f1-6 COLO-829-NovaSeq--COLO-829BL-NovaSeq.sv.annotated.v6.somatic.high_confidence.final.overlap.bedpe  | grep -v -e -E -f - COLO-829-NovaSeq--COLO-829BL-NovaSeq.sv.annotated.v6.somatic.high_confidence.final.either.bedpe > COLO-829-NovaSeq--COLO-829BL-NovaSeq.sv.annotated.v6.somatic.high_confidence.final.oneSideOnly.bedpe
 echo -e "NovaSeq\toneSide\t`cut -f1-6 COLO-829-NovaSeq--COLO-829BL-NovaSeq.sv.annotated.v6.somatic.high_confidence.final.oneSideOnly.bedpe |  sort | uniq | wc -l`" >> NYGC_comparison_result.tsv
 
-#Convert no overlap and one sided to hg19 for evaluation
+
+#PLOT
+Rscript plot_external_comparison_SVs.R
+
+
+#Convert to Overlap to hg19 for manual evaluation
 python liftOverBedpe.py --lift ./liftOver --chain hg38ToHg19.over.chain.gz --i COLO-829--COLO-829BL.sv.annotated.v6.somatic.high_confidence.final.noOverlap.bedpe --o COLO-829--COLO-829BL.sv.annotated.v6.somatic.high_confidence.final.noOverlap.hg19.bedpe --v T
 python liftOverBedpe.py --lift ./liftOver --chain hg38ToHg19.over.chain.gz --i COLO-829-NovaSeq--COLO-829BL-NovaSeq.sv.annotated.v6.somatic.high_confidence.final.noOverlap.bedpe --o COLO-829-NovaSeq--COLO-829BL-NovaSeq.sv.annotated.v6.somatic.high_confidence.final.noOverlap.hg19.bedpe --v T
 cat COLO-829--COLO-829BL.sv.annotated.v6.somatic.high_confidence.final.noOverlap.hg19.bedpe | awk '{print $0 "\tHiSeq\tnoOverlap"}' > COLO-829.noOverlap.toCheck.Hiseq.tmp
@@ -54,5 +70,3 @@ cat COLO-829--COLO-829BL.sv.annotated.v6.somatic.high_confidence.final.oneSideOn
 cat COLO-829-NovaSeq--COLO-829BL-NovaSeq.sv.annotated.v6.somatic.high_confidence.final.oneSideOnly.hg19.bedpe | awk '{print $0 "\tNovaSeq\toneSide"}' > COLO-829.oneSide.toCheck.NovaSeq.tmp
 
 cat COLO-829.noOverlap.toCheck.Hiseq.tmp COLO-829.noOverlap.toCheck.Novaseq.tmp COLO-829.oneSide.toCheck.NovaSeq.tmp COLO-829.oneSide.toCheck.Hiseq.tmp | sort -k1,1 -k2,2n -k3,3n > COLO-829.noOverlap.toCheck.tsv
-
-#Check those calls manually using IGV
