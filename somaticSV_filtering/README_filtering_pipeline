@@ -13,7 +13,7 @@ done
 
 #Remove duplicate breakpoints in VCF of illumina and pacbio -> Messes up downstream analysis with survivor unfortunately
 python pacbio_uniquify.py > pacbio.somatic.adjusted.unique.vcf
-python illumina_uniquify.py > illumina.somatic.adjusted.vcf
+python illumina_uniquify.py > illumina.somatic.adjusted.unique.vcf
 
 #merge using SURVIVOR
 echo "illumina.somatic.adjusted.unique.vcf"> merge.list
@@ -120,3 +120,9 @@ Rscript plot_characteristics.R
 
 #Create final truthset VCF:
 python truthset_table_to_VCF.py truthset_table.tsv > truthset_somaticSVs_COLO829.vcf
+
+
+#Liftover truthset to GRCh38 using https://www.ensembl.org/Homo_sapiens/Tools/AssemblyConverter
+#And modify the ALT and INFO fields in the lifted VCF
+python liftover_makeup.py truthset_somaticSVs_COLO829_liftedHg38.vcf > truthset_somaticSVs_COLO829_liftedHg38.corrected.vcf
+
